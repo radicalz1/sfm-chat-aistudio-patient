@@ -1,16 +1,17 @@
 import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TextInput, Button, FlatList, Image } from 'react-native'; // Tambahkan Image di import
+import { StyleSheet, Text, View, TextInput, Button, FlatList, Image } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import { Feather } from '@expo/vector-icons'; // Import Feather Icons
 
 export default function App() {
   const flatListRef = useRef(null);
   const [messages, setMessages] = useState([
-    { id: '4', sender: 'pasien', type: 'image', uri: 'https://via.placeholder.com/200' }, // Pesan gambar contoh
-    { id: '5', sender: 'pasien', type: 'document', name: 'Contoh Dokumen.pdf' }, // Pesan dokumen contoh
     { id: '1', sender: 'apoteker', type: 'text', text: 'Selamat datang! Ada yang bisa saya bantu?' },
     { id: '2', sender: 'pasien', type: 'text', text: 'Halo, saya mau bertanya tentang obat demam.' },
     { id: '3', sender: 'apoteker', type: 'text', text: 'Tentu, obat demam apa yang Anda maksud?' },
+    { id: '4', sender: 'pasien', type: 'document', name: 'Dokumen Penting.pdf', uri: 'file://dummy-document-uri.pdf', fileType: 'application/pdf' }, // Pesan dokumen contoh
+    { id: '5', sender: 'pasien', type: 'image', uri: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png' }, // Pesan gambar contoh - GOOGLE LOGO
   ]);
   const [inputText, setInputText] = useState('');
 
@@ -24,34 +25,26 @@ export default function App() {
       };
       setMessages([...messages, newMessage]);
       setInputText('');
-      flatListRef.current?.scrollToEnd({ animated: true });
+      setTimeout(() => { // Add setTimeout for delayed scroll
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100); // Delay of 100 milliseconds (adjust if needed)
     }
   };
 
   const handleDocumentUpload = async () => {
-    console.log('handleDocumentUpload dipanggil!');
+    console.log('handleDocumentUpload dipanggil!'); // Log 1: Awal fungsi
     try {
       const document = await DocumentPicker.getDocumentAsync({
         type: '*/*',
         multiple: false,
       });
 
-      console.log('DocumentPicker.getDocumentAsync selesai dipanggil');
+      console.log('DocumentPicker.getDocumentAsync selesai dipanggil'); // Log 2: Setelah DocumentPicker
 
       if (document.type === 'success') {
-        console.log('Document URI:', document.uri);
-        // alert(`Dokumen terpilih: ${document.name}`);
-
-        const newMessage = {
-          id: String(messages.length + 1),
-          sender: 'pasien',
-          type: 'document',
-          name: document.name,
-          uri: document.uri,
-          fileType: document.mimeType,
-        };
-        setMessages([...messages, newMessage]);
-        flatListRef.current?.scrollToEnd({ animated: true });
+        console.log('Document URI:', document.uri); // Log URI (tetap ada)
+        // alert(`Dokumen terpilih: ${document.name}`); // Alert dihapus
+        // ... (kode pembuatan pesan dihapus sementara) ...
       } else {
         console.log('Document picking cancelled or error:', document);
       }
@@ -62,7 +55,7 @@ export default function App() {
   };
 
   const handleImageUpload = async () => {
-    console.log('handleImageUpload dipanggil!');
+    console.log('handleImageUpload dipanggil!'); // Log 1: Awal fungsi
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
@@ -71,14 +64,14 @@ export default function App() {
         return;
       }
 
-      console.log('ImagePicker.launchImageLibraryAsync akan dipanggil');
+      console.log('ImagePicker.launchImageLibraryAsync akan dipanggil'); // Log 2: Sebelum ImagePicker
       const pickerResult = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
       });
-      console.log('ImagePicker.launchImageLibraryAsync selesai dipanggil');
+      console.log('ImagePicker.launchImageLibraryAsync selesai dipanggil'); // Log 3: Setelah ImagePicker
 
       if (pickerResult.canceled === true) {
         return;
@@ -86,17 +79,9 @@ export default function App() {
 
       if (pickerResult.assets && pickerResult.assets.length > 0) {
         const selectedImage = pickerResult.assets[0];
-        console.log('Image URI:', selectedImage.uri);
-        // alert(`Gambar terpilih: ${selectedImage.fileName || 'image'}`);
-
-        const newMessage = {
-          id: String(messages.length + 1),
-          sender: 'pasien',
-          type: 'image',
-          uri: selectedImage.uri,
-        };
-        setMessages([...messages, newMessage]);
-        flatListRef.current?.scrollToEnd({ animated: true });
+        console.log('Image URI:', selectedImage.uri); // Log URI (tetap ada)
+        // alert(`Gambar terpilih: ${selectedImage.fileName || 'image'}`); // Alert dihapus
+        // ... (kode pembuatan pesan dihapus sementara) ...
       } else {
         console.log('No image selected');
       }
@@ -117,48 +102,49 @@ export default function App() {
           data={messages}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => {
-            let messageContent;
-
-            if (item.type === 'text') {
-              messageContent = (
-                <Text style={styles.messageText}>{item.text}</Text>
-              );
-            } else if (item.type === 'image') {
-              messageContent = (
-                <Image
-                  source={{ uri: item.uri }}
-                  style={styles.messageImage}
-                />
-              );
-            } else if (item.type === 'document') {
-              messageContent = (
-                <View style={styles.documentContainer}>
-                  <Text style={styles.documentText}>Dokumen: {item.name}</Text>
-                </View>
-              );
-            } else {
-              messageContent = (
-                <Text style={styles.messageText}>Jenis pesan tidak dikenal</Text>
-              );
+            switch (item.type) {
+              case 'text':
+                return (
+                  <View
+                    style={[
+                      styles.messageContainer,
+                      item.sender === 'apoteker' && styles.pharmacistMessageContainer,
+                    ]}
+                  >
+                    <Text style={styles.messageText}>{item.text}</Text>
+                  </View>
+                );
+              case 'document':
+                return (
+                  <View style={[styles.messageContainer, styles.documentMessageContainer]}>
+                    <Feather name="file-text" size={24} color="white" style={styles.documentIcon} />
+                    <Text style={[styles.messageText, styles.documentMessageText]}>{item.name}</Text>
+                  </View>
+                );
+              case 'image':
+                return (
+                  <View style={[styles.imageMessageContainerSimplified]}> {/* Use simplified style */}
+                    <Image
+                      source={{ uri: item.uri }}
+                      style={styles.imageMessageImageSimplified} // Use simplified style
+                      resizeMode="contain"
+                    />
+                  </View>
+                );
+              default:
+                return (
+                  <View style={styles.messageContainer}>
+                    <Text style={styles.messageText}>Jenis pesan tidak dikenal</Text>
+                  </View>
+                );
             }
-
-            return (
-              <View
-                style={[
-                  styles.messageContainer,
-                  item.sender === 'apoteker' && styles.pharmacistMessageContainer,
-                ]}
-              >
-                {messageContent}
-              </View>
-            );
           }}
         />
       </View>
 
       <View style={styles.inputArea}>
-        <Button title="Dokumen" style={styles.attachmentButton} onPress={() => console.log('Tombol Dokumen ditekan!')} />
-        <Button title="Gambar" style={styles.attachmentButton} onPress={() => console.log('Tombol Gambar ditekan!')} />
+        <Button title="Dokumen" style={styles.attachmentButton} onPress={() => console.log('Tombol Dokumen ditekan!')} /> {/* Tombol Dokumen - Tes Langsung */}
+        <Button title="Gambar" style={styles.attachmentButton} onPress={() => console.log('Tombol Gambar ditekan!')} />   {/* Tombol Gambar - Tes Langsung */}
         <TextInput
           style={styles.input}
           placeholder="Ketik pesan..."
@@ -229,22 +215,36 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     alignSelf: 'flex-end',
   },
-  messageImage: { // Style untuk pesan gambar
+  documentMessageContainer: {
+    backgroundColor: '#607D8B', // Warna abu-abu kebiruan untuk dokumen
+    flexDirection: 'row', // Agar ikon dan teks berdampingan
+    alignItems: 'center', // Agar ikon dan teks sejajar vertikal
+  },
+  documentMessageText: {
+    marginLeft: 10, // Jarak antara ikon dan teks dokumen
+    flex: 1, // Agar teks dokumen memenuhi ruang yang tersedia
+  },
+  documentIcon: {
+    marginLeft: 5,
+  },
+  imageMessageContainerSimplified: { // SIMPLIFIED STYLE
+    // paddingVertical: 5, // Removed padding
+    backgroundColor: 'transparent', // Keep transparent background
+    width: 150,  // Explicit width
+    height: 150, // Explicit height
+  },
+  imageMessageImageSimplified: { // SIMPLIFIED STYLE
+    width: 150, // Explicit width - same as container
+    height: 150, // Explicit height - same as container
+    // borderRadius: 10, // Removed borderRadius for simplicity
+  },
+  imageMessageContainer: { // OLD STYLE - NOT USED
+    paddingVertical: 5,
+    backgroundColor: 'transparent',
+  },
+  imageMessageImage: { // OLD STYLE - NOT USED
     width: 200,
     height: 200,
     borderRadius: 10,
-    marginBottom: 5,
-    resizeMode: 'cover',
-  },
-  documentContainer: { // Style untuk container pesan dokumen
-    backgroundColor: '#444',
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 5,
-    alignSelf: 'flex-start',
-  },
-  documentText: { // Style untuk teks nama dokumen
-    color: 'white',
-    fontSize: 16,
   },
 });
