@@ -1,3 +1,5 @@
+require('dotenv').config(); // Load environment variables from .env file - ADDED
+
 import React, { useState, useRef } from 'react';
 import { StyleSheet, Text, View, TextInput, Button, FlatList, Image } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
@@ -15,7 +17,7 @@ export default function App() {
   ]);
   const [inputText, setInputText] = useState('');
 
-  const handleSendButtonPress = () => {
+  const handleSendButtonPress = async () => { // Tambahkan async
     if (inputText.trim() !== '') {
       const newMessage = {
         id: String(messages.length + 1),
@@ -23,11 +25,32 @@ export default function App() {
         type: 'text',
         text: inputText.trim(),
       };
-      setMessages([...messages, newMessage]);
-      setInputText('');
-      setTimeout(() => { // Add setTimeout for delayed scroll
+
+      // Kirim pesan ke backend server menggunakan fetch API
+      try {
+        const response = await fetch(process.env.BACKEND_API_URL + '/messages', { // Use process.env.BACKEND_API_URL
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newMessage), // Kirim pesan dalam format JSON
+        });
+
+        if (!response.ok) { // Cek jika response tidak OK (kode status bukan 200-299)
+          throw new Error(`HTTP error! status: ${response.status}`); // Lempar error jika response tidak OK
+        }
+
+        const responseData = await response.json(); // Baca response JSON dari server
+        console.log('Response dari server:', responseData); // Log response dari server
+
+        setMessages([...messages, newMessage]); // Tambahkan pesan ke state messages (tetap ada)
+        setInputText('');
         flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100); // Delay of 100 milliseconds (adjust if needed)
+
+      } catch (error) { // Tangkap error jika terjadi kesalahan saat fetch
+        console.error('Gagal mengirim pesan ke server:', error); // Log error ke konsol
+        alert('Gagal mengirim pesan. Coba lagi nanti.'); // Tampilkan alert ke pengguna (opsional)
+      }
     }
   };
 
