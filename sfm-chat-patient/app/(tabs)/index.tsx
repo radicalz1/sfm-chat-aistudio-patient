@@ -1,10 +1,9 @@
-require('dotenv').config(); // Load environment variables from .env file - ADDED
-
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react'; // ADDED useEffect import
 import { StyleSheet, Text, View, TextInput, Button, FlatList, Image } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons'; // Import Feather Icons
+import Constants from 'expo-constants'; // ADDED import Constants
 
 export default function App() {
   const flatListRef = useRef(null);
@@ -17,6 +16,12 @@ export default function App() {
   ]);
   const [inputText, setInputText] = useState('');
 
+  useEffect(() => { // useEffect hook for auto-scroll
+    if (messages && messages.length > 0) { // Check if messages is not empty
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }
+  }, [messages]); // Run useEffect whenever messages state changes
+
   const handleSendButtonPress = async () => { // Tambahkan async
     if (inputText.trim() !== '') {
       const newMessage = {
@@ -28,7 +33,7 @@ export default function App() {
 
       // Kirim pesan ke backend server menggunakan fetch API
       try {
-        const response = await fetch(process.env.BACKEND_API_URL + '/messages', { // Use process.env.BACKEND_API_URL
+        const response = await fetch('https://864412fa-f453-4841-8473-1b97e7555524-00-1uikfcb9cs0wd.pike.replit.dev/messages', { // Use Constants.expoConfig.extra.BACKEND_API_URL
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -45,8 +50,7 @@ export default function App() {
 
         setMessages([...messages, newMessage]); // Tambahkan pesan ke state messages (tetap ada)
         setInputText('');
-        flatListRef.current?.scrollToEnd({ animated: true });
-
+        // REMOVED setTimeout AND scrollToEnd HERE
       } catch (error) { // Tangkap error jika terjadi kesalahan saat fetch
         console.error('Gagal mengirim pesan ke server:', error); // Log error ke konsol
         alert('Gagal mengirim pesan. Coba lagi nanti.'); // Tampilkan alert ke pengguna (opsional)
