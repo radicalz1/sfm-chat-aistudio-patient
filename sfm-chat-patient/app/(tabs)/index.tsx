@@ -1,40 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react'; // ADDED useEffect import
-import { StyleSheet, Text, View, TextInput, Button, FlatList, Image } from 'react-native';
+import { StyleSheet, Text, View, TextInput, Button, FlatList, Image, requestAnimationFrame } from 'react-native'; // ADDED requestAnimationFrame import
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons'; // Import Feather Icons
 import Constants from 'expo-constants'; // ADDED import Constants
 
+const backendUri = 'https://864412fa-f453-4841-8473-1b97e7555524-00-1uikfcb9cs0wd.pike.replit.dev'; // KONSTANTA backendUri - **GANTI DENGAN URL BACKEND ANDA!**
+
 export default function App() {
   const flatListRef = useRef(null);
-  const [messages, setMessages] = useState([]); // State messages awalnya kosong!
+  const [messages, setMessages] = useState([
+    { id: '1', sender: 'apoteker', type: 'text', text: 'Selamat datang! Ada yang bisa saya bantu?' },
+    { id: '2', sender: 'pasien', type: 'text', text: 'Halo, saya mau bertanya tentang obat demam.' },
+    { id: '3', sender: 'apoteker', type: 'text', text: 'Tentu, obat demam apa yang Anda maksud?' },
+    { id: '4', sender: 'pasien', type: 'document', name: 'Dokumen Penting.pdf', uri: 'file://dummy-document-uri.pdf', fileType: 'application/pdf' }, // Pesan dokumen contoh
+    { id: '5', sender: 'pasien', type: 'image', uri: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png' }, // Pesan gambar contoh - GOOGLE LOGO
+  ]);
   const [inputText, setInputText] = useState('');
-
-  const fetchMessages = async () => { // Fungsi terpisah untuk mengambil pesan dari server
-    try {
-      const response = await fetch('https://864412fa-f453-4841-8473-1b97e7555524-00-1uikfcb9cs0wd.pike.replit.dev/getMessages'); // Panggil endpoint /getMessages
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const responseData = await response.json(); // Parse response JSON
-      console.log('Pesan diterima dari server (polling/awal):', responseData); // Log pesan dari server
-      setMessages(responseData); // Update state messages dengan pesan dari server
-    } catch (error) {
-      console.error('Gagal mengambil pesan dari server:', error);
-      // alert('Gagal mengambil pesan. Coba lagi nanti.'); // Alert error (opsional)
-    }
-  };
-
-  useEffect(() => { // useEffect hook untuk mengambil pesan awal dan polling
-    fetchMessages(); // Panggil fetchMessages saat komponen mount (pertama kali render)
-
-    const intervalId = setInterval(() => { // Set up polling setiap 3 detik
-      fetchMessages(); // Panggil fetchMessages setiap interval
-    }, 3000); // Interval 3000ms (3 detik)
-
-    return () => clearInterval(intervalId); // Clean up interval saat komponen unmount
-  }, []); // useEffect hanya dijalankan sekali saat komponen mount (array dependensi kosong [])
-
 
   const handleSendButtonPress = async () => { // Fungsi handleSendButtonPress (tidak berubah dari sebelumnya)
     if (inputText.trim() !== '') {
@@ -47,13 +29,16 @@ export default function App() {
 
       // Kirim pesan ke backend server menggunakan fetch API
       try {
-        const response = await fetch('https://864412fa-f453-4841-8473-1b97e7555524-00-1uikfcb9cs0wd.pike.replit.dev/messages', { // Use Constants.expoConfig.extra.BACKEND_API_URL
+        const response = await fetch(backendUri + '/messages', { // Use Constants.expoConfig.extra.BACKEND_API_URL - MENGGUNAKAN KONSTANTA backendUri
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(newMessage), // Kirim pesan dalam format JSON
         });
+
+        console.log('Response ok:', response.ok); // TAMBAHKAN LOG response.ok
+        console.log('Response status:', response.status); // TAMBAHKAN LOG response.status
 
         if (!response.ok) { // Cek jika response tidak OK (kode status bukan 200-299)
           throw new Error(`HTTP error! status: ${response.status}`); // Lempar error jika response tidak OK
@@ -64,9 +49,13 @@ export default function App() {
 
         setMessages([...messages, newMessage]); // Tambahkan pesan ke state messages (tetap ada)
         setInputText('');
+        requestAnimationFrame(() => { // Use requestAnimationFrame for smoother scroll - PERUBAHAN DI SINI
+          flatListRef.current?.scrollToEnd({ animated: true });
+        });
         // REMOVED setTimeout AND scrollToEnd HERE
       } catch (error) { // Tangkap error jika terjadi kesalahan saat fetch
-        console.error('Gagal mengirim pesan ke server:', error); // Log error ke konsol
+        console.error('Gagal mengirim pesan ke server:', error); // Log error ke konsol (tetap ada)
+        console.error('Full error object:', error); // TAMBAHKAN LOG FULL ERROR OBJECT - PERUBAHAN DI SINI
         alert('Gagal mengirim pesan. Coba lagi nanti.'); // Tampilkan alert ke pengguna (opsional)
       }
     }
@@ -142,7 +131,7 @@ export default function App() {
           ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => {
+          renderItem={({ item }) => { // CORRECTED renderItem function
             switch (item.type) {
               case 'text':
                 return (
