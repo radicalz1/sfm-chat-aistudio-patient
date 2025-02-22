@@ -9,14 +9,34 @@ const backendUri = 'https://864412fa-f453-4841-8473-1b97e7555524-00-1uikfcb9cs0w
 
 export default function App() {
   const flatListRef = useRef(null);
-  const [messages, setMessages] = useState([
-    { id: '1', sender: 'apoteker', type: 'text', text: 'Selamat datang! Ada yang bisa saya bantu?' },
-    { id: '2', sender: 'pasien', type: 'text', text: 'Halo, saya mau bertanya tentang obat demam.' },
-    { id: '3', sender: 'apoteker', type: 'text', text: 'Tentu, obat demam apa yang Anda maksud?' },
-    { id: '4', sender: 'pasien', type: 'document', name: 'Dokumen Penting.pdf', uri: 'file://dummy-document-uri.pdf', fileType: 'application/pdf' }, // Pesan dokumen contoh
-    { id: '5', sender: 'pasien', type: 'image', uri: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png' }, // Pesan gambar contoh - GOOGLE LOGO
-  ]);
+  const [messages, setMessages] = useState([]); // State messages awalnya kosong!
   const [inputText, setInputText] = useState('');
+
+  // const fetchMessages = async () => { // Fungsi terpisah untuk mengambil pesan dari server - POLLING DINONAKTIFKAN
+  //   try {
+  //     const response = await fetch(backendUri + '/getMessages'); // Panggil endpoint /getMessages - MENGGUNAKAN KONSTANTA backendUri
+  //     if (!response.ok) {
+  //       throw new Error(`HTTP error! status: ${response.status}`);
+  //     }
+  //     const responseData = await response.json(); // Parse response JSON
+  //     console.log('Pesan diterima dari server (polling/awal):', responseData); // Log pesan dari server
+  //     setMessages(responseData); // Update state messages dengan pesan dari server
+  //   } catch (error) {
+  //     console.error('Gagal mengambil pesan dari server:', error);
+  //     // alert('Gagal mengambil pesan. Coba lagi nanti.'); // Alert error (opsional)
+  //   }
+  // };
+
+  // useEffect(() => { // useEffect hook untuk mengambil pesan awal dan polling - POLLING DINONAKTIFKAN
+  //   fetchMessages(); // Panggil fetchMessages saat komponen mount (pertama kali render)
+
+  //   const intervalId = setInterval(() => { // Set up polling setiap 3 detik
+  //     fetchMessages(); // Panggil fetchMessages setiap interval
+  //     }, 3000); // Interval 3000ms (3 detik)
+
+  //   return () => clearInterval(intervalId); // Clean up interval saat komponen unmount
+  // }, []); // useEffect hanya dijalankan sekali saat komponen mount (array dependensi kosong [])
+
 
   const handleSendButtonPress = async () => { // Fungsi handleSendButtonPress (tidak berubah dari sebelumnya)
     if (inputText.trim() !== '') {
@@ -40,14 +60,12 @@ export default function App() {
         console.log('Response ok:', response.ok); // TAMBAHKAN LOG response.ok
         console.log('Response status:', response.status); // TAMBAHKAN LOG response.status
 
-        if (!response.ok) { // Cek jika response tidak OK (kode status bukan 200-299)
-          throw new Error(`HTTP error! status: ${response.status}`); // Lempar error jika response tidak OK
-        }
-
         const responseData = await response.json(); // Baca response JSON dari server
         console.log('Response dari server:', responseData); // Log response dari server
 
         setMessages([...messages, newMessage]); // Tambahkan pesan ke state messages (tetap ada)
+        console.log('Updated messages state:', messages); // TAMBAHKAN LOG UPDATED messages STATE - **NEW LINE ADDED**
+
         setInputText('');
         requestAnimationFrame(() => { // Use requestAnimationFrame for smoother scroll - PERUBAHAN DI SINI
           flatListRef.current?.scrollToEnd({ animated: true });
@@ -55,7 +73,7 @@ export default function App() {
         // REMOVED setTimeout AND scrollToEnd HERE
       } catch (error) { // Tangkap error jika terjadi kesalahan saat fetch
         console.error('Gagal mengirim pesan ke server:', error); // Log error ke konsol (tetap ada)
-        console.error('Full error object:', error); // TAMBAHKAN LOG FULL ERROR OBJECT - PERUBAHAN DI SINI
+        console.error('Full error object:', error); // TAMBAHKAN LOG FULL ERROR OBJECT
         alert('Gagal mengirim pesan. Coba lagi nanti.'); // Tampilkan alert ke pengguna (opsional)
       }
     }
@@ -131,7 +149,7 @@ export default function App() {
           ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => { // CORRECTED renderItem function
+          renderItem={({ item }) => {
             switch (item.type) {
               case 'text':
                 return (
@@ -171,7 +189,6 @@ export default function App() {
           }}
         />
       </View>
-
       <View style={styles.inputArea}>
         <Button title="Dokumen" style={styles.attachmentButton} onPress={() => console.log('Tombol Dokumen ditekan!')} /> {/* Tombol Dokumen - Tes Langsung */}
         <Button title="Gambar" style={styles.attachmentButton} onPress={() => console.log('Tombol Gambar ditekan!')} />   {/* Tombol Gambar - Tes Langsung */}
@@ -186,6 +203,22 @@ export default function App() {
         <Button title="Kirim" onPress={handleSendButtonPress} />
       </View>
     </View>
+  );
+}
+
+      <View style={styles.inputArea}>
+        <Button title="Dokumen" style={styles.attachmentButton} onPress={() => console.log('Tombol Dokumen ditekan!')} /> {/* Tombol Dokumen - Tes Langsung */}
+        <Button title="Gambar" style={styles.attachmentButton} onPress={() => console.log('Tombol Gambar ditekan!')} />   {/* Tombol Gambar - Tes Langsung */}
+        <TextInput
+          style={styles.input}
+          placeholder="Ketik pesan..."
+          value={inputText}
+          onChangeText={text => setInputText(text)}
+          onSubmitEditing={handleSendButtonPress}
+          multiline={true}
+        />
+        <Button title="Kirim" onPress={handleSendButtonPress} />
+      </View>
   );
 }
 
