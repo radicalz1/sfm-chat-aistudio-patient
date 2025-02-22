@@ -7,22 +7,36 @@ import Constants from 'expo-constants'; // ADDED import Constants
 
 export default function App() {
   const flatListRef = useRef(null);
-  const [messages, setMessages] = useState([
-    { id: '1', sender: 'apoteker', type: 'text', text: 'Selamat datang! Ada yang bisa saya bantu?' },
-    { id: '2', sender: 'pasien', type: 'text', text: 'Halo, saya mau bertanya tentang obat demam.' },
-    { id: '3', sender: 'apoteker', type: 'text', text: 'Tentu, obat demam apa yang Anda maksud?' },
-    { id: '4', sender: 'pasien', type: 'document', name: 'Dokumen Penting.pdf', uri: 'file://dummy-document-uri.pdf', fileType: 'application/pdf' }, // Pesan dokumen contoh
-    { id: '5', sender: 'pasien', type: 'image', uri: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png' }, // Pesan gambar contoh - GOOGLE LOGO
-  ]);
+  const [messages, setMessages] = useState([]); // State messages awalnya kosong!
   const [inputText, setInputText] = useState('');
 
-  useEffect(() => { // useEffect hook for auto-scroll
-    if (messages && messages.length > 0) { // Check if messages is not empty
-      flatListRef.current?.scrollToEnd({ animated: true });
+  const fetchMessages = async () => { // Fungsi terpisah untuk mengambil pesan dari server
+    try {
+      const response = await fetch('https://864412fa-f453-4841-8473-1b97e7555524-00-1uikfcb9cs0wd.pike.replit.dev/getMessages'); // Panggil endpoint /getMessages
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const responseData = await response.json(); // Parse response JSON
+      console.log('Pesan diterima dari server (polling/awal):', responseData); // Log pesan dari server
+      setMessages(responseData); // Update state messages dengan pesan dari server
+    } catch (error) {
+      console.error('Gagal mengambil pesan dari server:', error);
+      // alert('Gagal mengambil pesan. Coba lagi nanti.'); // Alert error (opsional)
     }
-  }, [messages]); // Run useEffect whenever messages state changes
+  };
 
-  const handleSendButtonPress = async () => { // Tambahkan async
+  useEffect(() => { // useEffect hook untuk mengambil pesan awal dan polling
+    fetchMessages(); // Panggil fetchMessages saat komponen mount (pertama kali render)
+
+    const intervalId = setInterval(() => { // Set up polling setiap 3 detik
+      fetchMessages(); // Panggil fetchMessages setiap interval
+    }, 3000); // Interval 3000ms (3 detik)
+
+    return () => clearInterval(intervalId); // Clean up interval saat komponen unmount
+  }, []); // useEffect hanya dijalankan sekali saat komponen mount (array dependensi kosong [])
+
+
+  const handleSendButtonPress = async () => { // Fungsi handleSendButtonPress (tidak berubah dari sebelumnya)
     if (inputText.trim() !== '') {
       const newMessage = {
         id: String(messages.length + 1),
@@ -58,7 +72,7 @@ export default function App() {
     }
   };
 
-  const handleDocumentUpload = async () => {
+  const handleDocumentUpload = async () => { // Fungsi handleDocumentUpload (tidak berubah)
     console.log('handleDocumentUpload dipanggil!'); // Log 1: Awal fungsi
     try {
       const document = await DocumentPicker.getDocumentAsync({
@@ -81,7 +95,7 @@ export default function App() {
     }
   };
 
-  const handleImageUpload = async () => {
+  const handleImageUpload = async () => { // Fungsi handleImageUpload (tidak berubah)
     console.log('handleImageUpload dipanggil!'); // Log 1: Awal fungsi
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
