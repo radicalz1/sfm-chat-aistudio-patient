@@ -1,71 +1,155 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, Button, FlatList, Image } from 'react-native';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  TextInput, 
+  Button, 
+  FlatList, 
+  Image, 
+  ActivityIndicator,
+  TouchableOpacity,
+  Linking
+} from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
+import { ChatService } from '../../services/ChatService';
+import * as FileSystem from 'expo-file-system';
 
-const backendUri = 'https://96da0d26-c362-44e5-997f-ddebbd8e09b4-00-278n226e57rda.sisko.replit.dev';
+const backendUri = 'https://96da0d26-c362-44e5-997f-ddebbd8e09b4-00-278n226e57rda.sisko.replit.dev:3000';
 
 export default function App() {
   const flatListRef = useRef(null);
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const chatService = useRef<ChatService | null>(null);
+
+  useEffect(() => {
+    chatService.current = new ChatService(backendUri);
+
+    chatService.current.onConnectionChange('main', (status) => {
+      setIsConnected(status);
+    });
+
+    chatService.current.onMessage('main', (message) => {
+      if (Array.isArray(message)) {
+        setMessages(message);
+      } else {
+        setMessages(prev => [...prev, message]);
+      }
+    });
+
+    return () => {
+      chatService.current?.disconnect();
+    };
+  }, []);
 
   const handleSendButtonPress = async () => {
     if (inputText.trim() !== '') {
       const newMessage = {
-        id: String(messages.length + 1),
+        id: String(Date.now()),
         sender: 'pasien',
         type: 'text',
         text: inputText.trim(),
+        timestamp: new Date().toISOString(),
       };
 
-      try {
-        const response = await fetch(backendUri + '/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(newMessage),
-        });
+      chatService.current?.sendMessage(newMessage);
+      setInputText('');
+      setMessages(prev => [...prev, newMessage]);
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const responseData = await response.json();
-        console.log('Response dari server:', responseData);
-
-        const updatedMessages = [...messages, newMessage];
-        setMessages(updatedMessages);
-        console.log('Updated messages state:', updatedMessages);
-        setInputText('');
-
-        if (flatListRef.current) {
-          setTimeout(() => {
-            flatListRef.current.scrollToEnd({ animated: true });
-          }, 100);
-        }
-      } catch (error) {
-        console.error('Error sending message:', error);
+      if (flatListRef.current) {
+        setTimeout(() => {
+          flatListRef.current.scrollToEnd({ animated: true });
+        }, 100);
       }
     }
   };
 
+  // Add loading state
+  const [uploadingFiles, setUploadingFiles] = useState<{[key: string]: boolean}>({});
+
+  // Modify document upload handler
   const handleDocumentUpload = async () => {
     try {
-      const document = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        multiple: false,
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 
+               'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true
       });
 
-      if (document.type === 'success') {
-        console.log('Document URI:', document.uri);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const messageId = String(Date.now());
+        setUploadingFiles(prev => ({ ...prev, [messageId]: true }));
+
+        try {
+          const file = result.assets[0];
+          const base64 = await FileSystem.readAsStringAsync(file.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+
+          const newMessage = {
+            id: messageId,
+            sender: 'pasien',
+            type: 'document',
+            name: file.name,
+            uri: `data:${file.mimeType};base64,${base64}`,
+            mimeType: file.mimeType,
+            timestamp: new Date().toISOString(),
+          };
+
+          setMessages(prev => [...prev, {
+            ...newMessage,
+            uploading: true
+          }]);
+
+          await chatService.current?.sendMessage(newMessage);
+
+          setMessages(prev => prev.map(msg => 
+            msg.id === messageId 
+              ? { ...msg, uploading: false } 
+              : msg
+          ));
+        } finally {
+          setUploadingFiles(prev => {
+            const newState = { ...prev };
+            delete newState[messageId];
+            return newState;
+          });
+        }
       }
     } catch (error) {
-      console.error('Error picking document:', error);
+      console.error('Error in document upload:', error);
+      alert('Failed to upload document. Please try again.');
     }
   };
+
+  // Remove this entire block (lines 131-157)
+  /* Remove from here
+  {item.type === 'document' && (
+    <TouchableOpacity>
+      onPress={() => {
+        if (!item.uploading && item.uri) {
+          Linking.openURL(item.uri);
+        }
+      }}
+    >
+      <View style={[styles.messageContainer, styles.documentMessageContainer]}>
+        <Feather name="file-text" size={24} color="white" style={styles.documentIcon} />
+        <View style={styles.documentContent}>
+          <Text style={[styles.messageText, styles.documentMessageText]}>
+            {item.name}
+          </Text>
+          {item.uploading && (
+            <ActivityIndicator size="small" color="#fff" style={styles.uploadingIndicator} />
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  )}
+  Remove to here */
 
   const handleImageUpload = async () => {
     try {
@@ -85,52 +169,108 @@ export default function App() {
 
       if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
         const selectedImage = pickerResult.assets[0];
-        console.log('Image URI:', selectedImage.uri);
+        const newMessage = {
+          id: String(Date.now()),
+          sender: 'pasien',
+          type: 'image',
+          uri: selectedImage.uri,
+          timestamp: new Date().toISOString(),
+        };
+
+        chatService.current?.sendMessage(newMessage);
+        setMessages(prev => [...prev, newMessage]);
       }
     } catch (error) {
       console.error('Error picking image:', error);
     }
   };
 
+  const renderItem = ({ item }) => {
+    if (item.type === 'text') {
+      return (
+        <View style={[
+          styles.messageContainer,
+          item.sender === 'apoteker' && styles.pharmacistMessageContainer,
+        ]}>
+          <Text style={styles.messageText}>{item.text}</Text>
+        </View>
+      );
+    }
+
+    if (item.type === 'document') {
+      return (
+        <TouchableOpacity 
+          onPress={() => {
+            if (!item.uploading && item.uri) {
+              Linking.openURL(item.uri);
+            }
+          }}
+        >
+          <View style={[
+            styles.messageContainer,
+            styles.documentMessageContainer,
+            item.sender === 'apoteker' && styles.pharmacistMessageContainer,
+          ]}>
+            <Feather name="file-text" size={24} color="white" style={styles.documentIcon} />
+            <View style={styles.documentContent}>
+              <Text style={[styles.messageText, styles.documentMessageText]}>
+                {item.name}
+              </Text>
+              {item.uploading && (
+                <ActivityIndicator size="small" color="#fff" style={styles.uploadingIndicator} />
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
+    if (item.type === 'image') {
+      return (
+        <View style={[
+          styles.messageContainer,
+          item.sender === 'apoteker' && styles.pharmacistMessageContainer,
+        ]}>
+          <View style={styles.imageMessageContainerSimplified}>
+            <Image
+              source={{ uri: item.uri }}
+              style={styles.imageMessageImageSimplified}
+              resizeMode="contain"
+            />
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={[
+        styles.messageContainer,
+        item.sender === 'apoteker' && styles.pharmacistMessageContainer,
+      ]}>
+        <Text style={styles.messageText}>Jenis pesan tidak dikenal</Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Chat dengan Apoteker</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Chat dengan Apoteker</Text>
+        {!isConnected && (
+          <View style={styles.connectionStatus}>
+            <ActivityIndicator size="small" color="#fff" />
+            <Text style={styles.connectionText}>Reconnecting...</Text>
+          </View>
+        )}
+      </View>
 
       <View style={styles.chatArea}>
         <FlatList
           ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View
-              style={[
-                styles.messageContainer,
-                item.sender === 'apoteker' && styles.pharmacistMessageContainer,
-              ]}
-            >
-              {item.type === 'text' && <Text style={styles.messageText}>{item.text}</Text>}
-              {item.type === 'document' && (
-                <View style={[styles.messageContainer, styles.documentMessageContainer]}>
-                  <Feather name="file-text" size={24} color="white" style={styles.documentIcon} />
-                  <Text style={[styles.messageText, styles.documentMessageText]}>{item.name}</Text>
-                </View>
-              )}
-              {item.type === 'image' && (
-                <View style={styles.imageMessageContainerSimplified}>
-                  <Image
-                    source={{ uri: item.uri }}
-                    style={styles.imageMessageImageSimplified}
-                    resizeMode="contain"
-                  />
-                </View>
-              )}
-              {item.type === 'default' && (
-                <View style={styles.messageContainer}>
-                    <Text style={styles.messageText}>Jenis pesan tidak dikenal</Text>
-                  </View>
-              )}
-            </View>
-          )}
+          style={styles.flatList}
+          renderItem={renderItem}
           onContentSizeChange={() => {
             if (flatListRef.current && messages.length > 0) {
               flatListRef.current.scrollToEnd({ animated: true });
@@ -164,11 +304,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     alignItems: 'stretch',
   },
+  header: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   title: {
     fontSize: 24,
     color: 'white',
     marginBottom: 20,
     textAlign: 'center',
+  },
+  connectionStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 5,
+  },
+  connectionText: {
+    color: '#fff',
+    marginLeft: 5,
+    fontSize: 12,
   },
   chatArea: {
     flex: 1,
@@ -226,5 +381,17 @@ const styles = StyleSheet.create({
   imageMessageImageSimplified: {
     width: 150,
     height: 150,
+  },
+  flatList: {
+    pointerEvents: 'auto'
+  },
+  documentContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  uploadingIndicator: {
+    marginLeft: 10,
   },
 });
