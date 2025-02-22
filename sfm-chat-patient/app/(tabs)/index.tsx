@@ -4,7 +4,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 
-const backendUri = 'https://864412fa-f453-4841-8473-1b97e7555524-00-1uikfcb9cs0wd.pike.replit.dev';
+const backendUri = 'https://96da0d26-c362-44e5-997f-ddebbd8e09b4-00-278n226e57rda.sisko.replit.dev';
 
 export default function App() {
   const flatListRef = useRef(null);
