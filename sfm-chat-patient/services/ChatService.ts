@@ -1,14 +1,50 @@
 import { io, Socket } from 'socket.io-client';
+import { TelegramService } from './TelegramService';
+import { Patient } from '../models/Patient';
+import { connectDB } from '../utils/db';
+import Constants from 'expo-constants';
 
 class ChatService {
   private socket: Socket;
   private messageCallbacks: Map<string, (message: any) => void>;
   private connectionCallbacks: Map<string, (status: boolean) => void>;
+  private telegram: TelegramService;
+  private currentPatient: any;
+  private currentSession: any;
 
   constructor(serverUrl: string) {
     this.messageCallbacks = new Map();
     this.connectionCallbacks = new Map();
+    this.telegram = new TelegramService(
+      Constants.expoConfig?.extra?.telegramBotToken || '',
+      Constants.expoConfig?.extra?.telegramGroupId || ''
+    );
     this.initSocket(serverUrl);
+  }
+
+  async initializePatient(name: string, phoneNumber: string) {
+    // Initialize MongoDB connection if not already connected
+    await connectDB();
+
+    let patient = await Patient.findOne({ phoneNumber });
+
+    if (!patient) {
+      const topicId = await this.telegram.getOrCreateTopic(name, phoneNumber);
+      patient = await Patient.create({
+        name,
+        phoneNumber,
+        telegramTopicId: topicId
+      });
+    }
+
+    this.currentPatient = patient;
+    this.currentSession = {
+      startTime: new Date(),
+      messages: []
+    };
+
+    patient.sessions.push(this.currentSession);
+    await patient.save();
   }
 
   private initSocket(serverUrl: string) {
@@ -58,42 +94,73 @@ class ChatService {
     });
   }
 
-  sendMessage(message: any): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket.connected) {
-        console.warn('Not connected to server, message will be queued');
-        reject(new Error('Not connected to server'));
-        return;
+  async sendMessage(message: any): Promise<void> {
+    try {
+      if (!this.currentPatient || !this.currentSession) {
+        // Initialize with default patient if none exists
+        await this.initializePatient(
+          'Default Patient', // Replace with actual patient info
+          '+1234567890'     // Replace with actual phone number
+        );
       }
 
-      // Add detailed logging for document messages
       if (message.type === 'document') {
-        console.log('Sending document:', {
-          type: message.type,
-          id: message.id,
+        const telegramFile = await this.telegram.uploadDocument({
+          base64: message.uri,
           name: message.name,
-          mimeType: message.mimeType,
-          uriPrefix: message.uri?.substring(0, 50) + '...',
-          uriLength: message.uri?.length
-        });
+          mimeType: message.mimeType
+        }, this.currentPatient.telegramTopicId);
+
+        message.uri = telegramFile.fileUrl;
+        message.telegramFileId = telegramFile.fileId;
       }
 
-      this.socket.emit('message', message, (response: any) => {
-        console.log('Server response:', response);
-        if (response?.error) {
-          console.error('Message send failed:', response.error);
-          reject(response.error);
-        } else {
-          console.log('Message sent successfully');
-          resolve();
-        }
+      // Ensure currentSession exists
+      if (!this.currentSession) {
+        this.currentSession = {
+          startTime: new Date(),
+          messages: []
+        };
+        this.currentPatient.sessions.push(this.currentSession);
+      }
+
+      // Save message to current session
+      this.currentSession.messages.push({
+        type: message.type,
+        content: message.type === 'text' ? message.text : message.uri,
+        timestamp: new Date(),
+        fileId: message.telegramFileId,
+        fileUrl: message.uri
       });
-    });
+
+      await this.currentPatient.save();
+
+      // Send through socket
+      this.socket.emit('message', message);
+    } catch (error) {
+      console.error('Error processing message:', error);
+      throw error;
+    }
   }
 
-  private fetchMessageHistory() {
-    console.log('Fetching message history...');
-    this.socket.emit('fetch:history');
+  disconnect() {
+    if (this.currentSession) {
+      this.currentSession.endTime = new Date();
+      this.currentPatient?.save();
+    }
+    this.socket.disconnect();
+  }
+
+  private notifyConnectionStatus(status: boolean) {
+    if (this.connectionCallbacks) {
+      this.connectionCallbacks.forEach(callback => callback(status));
+    }
+  }
+
+  private notifyNewMessage(message: any) {
+    if (this.messageCallbacks) {
+      this.messageCallbacks.forEach(callback => callback(message));
+    }
   }
 
   onMessage(id: string, callback: (message: any) => void) {
@@ -104,16 +171,31 @@ class ChatService {
     this.connectionCallbacks.set(id, callback);
   }
 
-  private notifyNewMessage(message: any) {
-    this.messageCallbacks.forEach(callback => callback(message));
-  }
+  private async fetchMessageHistory() {
+    if (!this.currentPatient) {
+      console.warn('No patient initialized, skipping message history fetch');
+      return;
+    }
 
-  private notifyConnectionStatus(status: boolean) {
-    this.connectionCallbacks.forEach(callback => callback(status));
-  }
+    try {
+      // Get messages from current session
+      const currentSessionMessages = this.currentSession?.messages || [];
 
-  disconnect() {
-    this.socket.disconnect();
+      // Convert to chat format
+      const formattedMessages = currentSessionMessages.map(msg => ({
+        id: String(Date.now()), // You might want to store actual message IDs
+        sender: 'pasien',
+        type: msg.type,
+        text: msg.type === 'text' ? msg.content : undefined,
+        uri: msg.type !== 'text' ? msg.fileUrl : undefined,
+        name: msg.type === 'document' ? msg.content.split('/').pop() : undefined,
+        timestamp: msg.timestamp
+      }));
+
+      this.notifyNewMessage(formattedMessages);
+    } catch (error) {
+      console.error('Error fetching message history:', error);
+    }
   }
 }
 

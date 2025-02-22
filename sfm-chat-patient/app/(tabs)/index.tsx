@@ -24,22 +24,39 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isConnected, setIsConnected] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const chatService = useRef<ChatService | null>(null);
 
   useEffect(() => {
-    chatService.current = new ChatService(backendUri);
+    const initializeChat = async () => {
+      try {
+        chatService.current = new ChatService(backendUri);
 
-    chatService.current.onConnectionChange('main', (status) => {
-      setIsConnected(status);
-    });
+        // Initialize with patient info (you might want to get this from a login screen or storage)
+        await chatService.current.initializePatient(
+          'Patient Name', // Replace with actual patient name
+          '+1234567890'  // Replace with actual phone number
+        );
 
-    chatService.current.onMessage('main', (message) => {
-      if (Array.isArray(message)) {
-        setMessages(message);
-      } else {
-        setMessages(prev => [...prev, message]);
+        chatService.current.onConnectionChange('main', (status) => {
+          setIsConnected(status);
+        });
+
+        chatService.current.onMessage('main', (message) => {
+          if (Array.isArray(message)) {
+            setMessages(message);
+          } else {
+            setMessages(prev => [...prev, message]);
+          }
+        });
+
+        setIsInitialized(true);
+      } catch (error) {
+        console.error('Failed to initialize chat:', error);
       }
-    });
+    };
+
+    initializeChat();
 
     return () => {
       chatService.current?.disconnect();
